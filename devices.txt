@@ -1,0 +1,24 @@
+{
+    "devices": [
+        {	
+	    "hostname": "dist-rtr01",
+	    "devicetype": "IOS-XE",
+	    "mgmtIP": "10.10.20.175"
+	    },
+        {
+	    "hostname": "dist-rtr02",
+	    "devicetype": "IOS-XE",
+	    "mgmtIP": "10.10.20.176"
+	    },
+        {
+            "hostname": "dist-sw01",
+            "devicetype": "NXOS",
+            "mgmtIP": "10.10.20.177"
+            },
+        {
+            "hostname": "dist-sw02",
+            "devicetype": "NXOS",
+            "mgmtIP": "10.10.20.178"
+            }
+    ]
+}

@@ -7,5 +7,5 @@ def textToJson(file):
 
     return devDict
 
-devDict = textToJson("devices.txt")
-print(devDict)
+devices = textToJson("devices.txt")
+print(devices)

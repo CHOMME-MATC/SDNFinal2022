@@ -29,7 +29,7 @@ def getIOSXE_IP(deviceIP):
     response = requests.request("GET", url, auth = (username,password), verify = False, headers=headers, data=payload)
 
     intDict = response.json()['ietf-interfaces:interfaces']['interface']
-
+    
     return intDict
 
 # parces out the returned data from the devices and creates a dictionary with interface names as the key and IP as the value 
@@ -76,16 +76,16 @@ def nexos9000(command, IP):
     ]
 
     response = requests.post(url,data=json.dumps(payload),verify=False,headers=myheaders,auth=(switchuser,switchpassword)).json()
-
+    
     return response
 
 # Iterates the response dictionary and creates a dictionary that has the interface name for the key and the IP as the value
 def iterateSwitchDict(switchDict):
 
     devDict = {}
-
+    print(switchDict)
     parsedSwitchDict = switchDict['result']['body']['TABLE_intf']['ROW_intf']
-
+    
     for interface in parsedSwitchDict:
         
         devDict.update({f"{interface['intf-name']}" : f"{interface['prefix']}"})
@@ -100,7 +100,7 @@ def getSwitchIPs(IP):
 
     # parces out the response dictionary and creates a dictionary containing the int name as the key and the IP as the value
     Switch = iterateSwitchDict(switchIPDict)
-
+    print(Switch)
     return Switch
 
 '''

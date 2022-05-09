@@ -17,9 +17,11 @@ import xmltodict
 import xml.dom.minidom
 from lxml import etree
 from ncclient import manager
-from collections import OrderedDict
 import requests 
 import json
+import time
+
+
 
 #getCookie was imported from the turnipTheBeet git repository
 
@@ -262,8 +264,8 @@ def changeNXOSPF(mgmtIP, procID, intName, authCookie): # function responsible fo
 
     url = 'https://' + mgmtIP + '/api/mo/sys.json' # url contains the destination for the api call, with mgmtIP being the ip address of the
                                                   # device being passed to the function
-
-
+    
+    
     payload = { # the payload iterates through the model, passing intName, area, and procID to id, area, and name attributes respectively
     "topSystem": {
     "children": [{
@@ -339,18 +341,70 @@ def addIPValue(ip): # Function responsible for adding values to pre existing ip 
     return ipPlusFifteen # ipPlusFifteen is returned for further use
 
 
-def modifyIOSXEInt(apiCall, userSN, modifiedIP, userInt, userDesc): # function responsible for modifying the dicitonary containing the device data
+def modifyIOSXEInt(modifiedIP, userInt): # function responsible for modifying the dicitonary containing the device data
 
-    null = 'null' # function in progress
+    #xmlBase is the base config template used to push address changes on iosxe devices using the %var% format for configurable items
+
+    xmlBase = """<config xmlns:xc="urn:ietf:params:xml:ns:netconf:base:1.0" xmlns = "urn:ietf:params:xml:ns:netconf:base:1.0">  
+		<native xmlns="http://cisco.com/ns/yang/Cisco-IOS-XE-native">
+			<interface>
+                            <%intName%>
+				<name>%intNum%</name>
+				
+				<ip>                                    
+                                    <address>
+                                        <primary>
+                                            <address>%addr%</address>
+                                            <mask>%mask%</mask>
+                                         </primary>
+                                    </address>                                   
+				</ip>				
+			    </GigabitEthernet>
+			</interface>
+		    
+                </native>
+        </config>"""
+
+    # Lines 152-155 were imported from the turnipTheBeet git repository
+
+    intNumber = userInt[-1:] # intNumber stores the number of the interface
+    
+    intName = userInt[:-1] # intName stores the name of the interface
+
+    # lines 152-155 are replacing the address, interface name, interface number, and subnet mask variables with user specified parameters
+
+    if intNumber != '1':
+           
+        xmlBase = xmlBase.replace("%addr%", modifiedIP)
+        xmlBase = xmlBase.replace("%intName%", intName)
+        xmlBase = xmlBase.replace("%intNum%", intNumber)
+        xmlBase = xmlBase.replace("%mask%", '255.255.255.252')
+
+    
+    return xmlBase # the xml config is returned to main for further use
+
+
+
+
+def netconfCall(xmlConf, mgmtIP): # function used to make netconf call
+
+# with statement passes the mgmtIP and other information to specify the location and auth credientials of the device
+
+    with manager.connect(host=mgmtIP,port='830',username='cisco',password='cisco',hostkey_verify=False) as m:
+
+        netconf_reply = m.edit_config(target = 'running', config = xmlConf) # netconf call is made using passed xml config and information from line 48 
+        
+#        print(netconf_reply) test print statment
+
 
 
 def modifyIOSXEOSPF(deviceName):
 
 
     # print statement is used to tell the user to manually change the ospf parameters on the ios xe device 
-    print('Manually change the OSPF network statement on', deviceName, ' to match the addressing change from the 172.16 network to the 172.31 Network. You have 120 seconds to do so.')
+    print('Manually change the OSPF statement on '+deviceName +' to match the addressing change from the 172.16 network to the 172.31 Network. You have 120 seconds to do so.')
 
-    time.sleep(120) # time is used to delay the main script by 120 seconds in order to allow for manual changes
+    time.sleep(60) # time is used to delay the main script by 120 seconds in order to allow for manual changes
 
     
 
@@ -417,6 +471,24 @@ editOSPF = changeNXOSPF('10.10.20.178', '1', intName, cookie)
 
 print('changeOSPF works')
 
+deviceName = 'dist-rtr02'
+
+mgmtIP = '10.10.20.176'
+
+userInt = 'GigabitEthernet2'
+
+intAddr = '172.16.252.29'
+
+addressChange = addIPValue(intAddr)
+
+xmlInt = modifyIOSXEInt(addressChange, userInt)
+
+pushConfig = netconfCall(xmlInt, mgmtIP)
+
+ospfConfig = modifyIOSXEOSPF(deviceName)
+
+
+
 '''
 data = datafile
 
@@ -452,7 +524,7 @@ for device in data:
 '''
 
 
-    elif data['type'].lower == 'ios-xe':
+    elif data['type'].lower() == 'ios-xe':
 
         callDevice =  function to get device response
 

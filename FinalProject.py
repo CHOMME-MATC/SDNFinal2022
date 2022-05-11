@@ -20,12 +20,124 @@ from ncclient import manager
 import requests 
 import json
 import time
+import sys
+import requests
+import re
 
+
+def userInput(prompt, answerList): #User input function
+
+    answer = input(prompt) #variable that tracks the users input according to the prompt that was passed to the function.
+
+    while answer not in answerList: #while loop that will return the initial inpuy prompt if the users answer is not valid 
+        print('Please respond using a valid answer.')
+        answer = input(prompt)
+
+    return answer
 
 def textToJson(file): # function responsible for converting the textfile to json
-    txtfile = open(file)
+    txtfile = open(file) 
     devices = txtfile.read()
     devDict = json.loads(devices)
+
+    return devDict # devDict is returned to main for further use
+
+def writeFileChanges(updatedDict, file): # function responsible for updating the textfile
+    txtfile = open(file, 'w')
+    content = json.dumps(updatedDict)
+    txtfile.write(content)
+    txtfile.close()
+
+# makes restconf call to the IOS-XE routers and get itetf-ipv4 interface information
+def getIOSXE_IP(deviceIP):
+
+    url = "https://"+ deviceIP +":443/restconf/data/ietf-interfaces:interfaces"
+
+    username = 'cisco'
+    password = 'cisco'
+    payload={}
+    headers = {
+      'Content-Type': 'application/yang-data+json',
+      'Accept': 'application/yang-data+json',
+      'Authorization': 'Basic cm9vdDpEX1ZheSFfMTAm'
+    }
+
+    response = requests.request("GET", url, auth = (username,password), verify = False, headers=headers, data=payload)
+
+    intDict = response.json()['ietf-interfaces:interfaces']['interface']
+    
+    return intDict
+
+# parces out the returned data from the devices and creates a dictionary with interface names as the key and IP as the value 
+def createIntDict(interfaces):
+
+    devDict = {}
+
+    for interface in interfaces:
+        if interface['name'] != 'Loopback0':
+            devDict.update({f"{interface['name']}" : f"{interface['ietf-ip:ipv4']['address'][0]['ip']}"})
+    
+    return devDict
+
+# condenses the code to only need to pass a management address of a router to run the all the funcitons
+def getRouterIPs(IP):
+
+    # accepts the management IP of a IOS-XE device and returns a response dictionary
+    response = getIOSXE_IP(IP)
+
+    # iterates through the response and return a dictionary of IP's where the key is the interface name and the value is the IP
+    # note that you can set the variable to be the name of the device you are iterating the response from
+    devDict = createIntDict(response)
+
+    return devDict
+
+# api request that runs a show ip interface brief and returns the response dicitonary
+def nexos9000(command, IP): 
+
+    switchuser='cisco'
+    switchpassword='cisco'
+
+    url='https://' + IP + '/ins'
+    myheaders={'content-type':'application/json-rpc'}
+    payload=[
+      {
+        "jsonrpc": "2.0",
+        "method": "cli",
+        "params": {
+          "cmd": command,
+          "version": 1
+        },
+        "id": 1
+      }
+    ]
+
+    response = requests.post(url,data=json.dumps(payload),verify=False,headers=myheaders,auth=(switchuser,switchpassword)).json()
+    
+    return response
+
+# Iterates the response dictionary and creates a dictionary that has the interface name for the key and the IP as the value
+def iterateSwitchDict(switchDict):
+
+    devDict = {}
+    print(switchDict)
+    parsedSwitchDict = switchDict['result']['body']['TABLE_intf']['ROW_intf']
+    
+    for interface in parsedSwitchDict:
+        
+        devDict.update({f"{interface['intf-name']}" : f"{interface['prefix']}"})
+
+    return devDict
+
+# Condenses the code to allow for easy iteration
+def getSwitchIPs(IP):
+
+    # accept the mgmt IP and sends a show ip interface brief command to the switch and returns a response dicitonary
+    switchIPDict = nexos9000("show ip interface brief", IP)
+
+    # parces out the response dictionary and creates a dictionary containing the int name as the key and the IP as the value
+    Switch = iterateSwitchDict(switchIPDict)
+    print(Switch)
+    return Switch
 
 
 #getCookie was imported from the turnipTheBeet git repository
@@ -334,7 +446,7 @@ def addIPValue(ip): # Function responsible for adding values to pre existing ip 
     for octet in seperateOctets: #for loop adding all octets of the ip address to the list of octets
         octetList.append(octet)
 
-    octetList[1] = int(octetList[1]) + 15 # The second octet of the address will be changed to an integer and have 5 added to it, after that
+    octetList[1] = int(octetList[1]) + 15 # The second octet of the address will be changed to an integer and have 15 added to it, after that
                                          # has been done, it will be turned back into a string and concatenated with the other octets in
                                          # octetList to be stored as one string value which is will be stored as the ipPlusFive variable
  
@@ -376,7 +488,8 @@ def modifyIOSXEInt(modifiedIP, userInt): # function responsible for modifying th
     
     intName = userInt[:-1] # intName stores the name of the interface
 
-    # lines 152-155 are replacing the address, interface name, interface number, and subnet mask variables with user specified parameters
+    # lines below are replacing the address, interface name, interface number, and subnet mask variables with user specified parameters on all
+    # interfaces besides the first gigabit ethernet interface
 
     if intNumber != '1':
            
@@ -413,141 +526,86 @@ def modifyIOSXEOSPF(deviceName):
 
     
 
+# main
 
 
-# hard code testing and model brain storm of main, ignore commented sections below hardcode variables
+devices = textToJson('devices.txt')
 
+listofDevices = devices['devices']
 
-nxVlanName = 'TestVlan'
+print('The Contents of the device dictionary are as follows:')
 
-nxVLAN = 'vlan-120'
+for device in listofDevices:
 
-vlanAddress = '172.16.120.3'
+    print(device)
 
-cookie = getNXCookie('10.10.20.178')
+askforUpdate = userInput('\nWould you like to add, delete, or edit the contents of the device dictionary? [Edit, Delete, Add, No Change]: ', ['edit','Edit','Delete','delete','add','no change','No Change'])
 
-sviName = 'vlan 120'
+if askforUpdate.lower() == 'edit':
 
-intName = 'vlan 101'
+    deviceNum = input('Which entry would you like to update? ')
 
-oldvlanAddr = '172.16.101.3'
+    while int(deviceNum) > 4:
+        print('That is not a valid entry number')
+        deviceNum = input('Which entry would you like to update? ')
 
+    else:
+        entryNum = int(deviceNum) - 1
+        deviceHN = input('\nWhat is the hostname of the device? ')
+        deviceType = input('\nWhat is the ios type of the device? [NXOS or IOS-XE]: ')
+        deviceIP = input('\nWhat is the Management IP of the device? ')
 
-modifiedIP = addIPValue(vlanAddress)
+        newValues = {"hostname": deviceHN, "devicetype": deviceType, "mgmtIP" : deviceIP}
 
-oldmodifiedIP = addIPValue(oldvlanAddr)
+        listofDevices[entryNum] = newValues
 
-
-print(modifiedIP)
-print('addIPValue works')
-
-newHSRPAddr = hsrpIPValue(modifiedIP)
-newoldHSRPAddr = hsrpIPValue(oldmodifiedIP)
-
-
-print(newHSRPAddr)
-print('hsrpIPValue works')
-
-
-enterVLAN = createNXVLAN('10.10.20.178', nxVLAN, nxVlanName, cookie)
-
-
-print('createVLAN works')
-
-
-newAddress = modifiedIP + '/24'
-fullAddress = oldmodifiedIP + '/24'
-
-enterSVI = createNXSVI('10.10.20.178', sviName, newAddress, cookie)
-changeoldVLAN  = createNXSVI('10.10.20.178', intName, fullAddress, cookie)
-
-
-print('createSVI works')
-
-enterHSRP = changeNXHSRP('10.10.20.178', sviName, newHSRPAddr, cookie)
-editHSRP = changeNXHSRP('10.10.20.178', intName, newoldHSRPAddr, cookie)
-
-
-print('createHSRP works')
-
-enterOSPF = changeNXOSPF('10.10.20.178', '1', sviName, cookie)
-
-editOSPF = changeNXOSPF('10.10.20.178', '1', intName, cookie)
-
-print('changeOSPF works')
-
-deviceName = 'dist-rtr02'
-
-mgmtIP = '10.10.20.176'
-
-userInt = 'GigabitEthernet2'
-
-intAddr = '172.16.252.29'
-
-addressChange = addIPValue(intAddr)
-
-xmlInt = modifyIOSXEInt(addressChange, userInt)
-
-pushConfig = netconfCall(xmlInt, mgmtIP)
-
-ospfConfig = modifyIOSXEOSPF(deviceName)
-
-
-
-'''
-data = datafile
-
-
-
-for device in data:
-
-    mgmtIP = device['mgmtIP']
-
-    deviceName = device['hostname']
-
-
-    if data['type'].lower == 'nxos':
-        
-        cookie = getNXCookie(mgmtIP)
-
-        getnxapidata = nxapidatafunct(mgmtip,etc)
-
-'''        
-
-##        cookie = getNXCookie('10.10.20.177')
-##
-##        enterVLAN = createVLAN('10.10.20.177', nxVLAN, nxVlanName, cookie)
-##
-##        enterSVI = createSVI(mgmtIP, nxVLAN, newAddress, cookie)
-##
-##        modifiedIP = addIPValue(intIp)
-##
-##        enterHSRP = createHSRP('10.10.20.177', interfaceName, newHSRPAddr, newHSRPGroup, cookie)
-##
-##        enterOSPF = changeOSPF(mgmtIP, OSPFProc, OSPFArea, interfaceName, cookie)
-
-'''
-
-
-    elif data['type'].lower() == 'ios-xe':
-
-        callDevice =  function to get device response
-
-        for interface in callDevice['interface']:
-
-            modifiedIP = addIPValue(intIp)
-
-            changeInt = modifyIOSXEInt(apiCall, userSN, modifiedIP, userInt, userDesc)
-
-        changeOSPF = modifyIOSXEOSPF(deviceName)
-
-'''
-
+        print(listofDevices)
+        writeFileChanges(devices,'devices.txt')
         
 
+elif askforUpdate.lower() == 'add':
+    
+    deviceHN = input('\nWhat is the hostname of the device? ')
+    deviceType = input('\nWhat is the ios type of the device? [NXOS or IOS-XE]: ')
+    deviceIP = input('\nWhat is the Management IP of the device? ')
+
+    newValues = {"hostname": deviceHN, "devicetype": deviceType, "mgmtIP" : deviceIP}
+
+    listofDevices.append(newValues)
+    print(listofDevices)
+    writeFileChanges(devices, 'devices.txt')
+    
+    
+
+elif askforUpdate.lower() == 'delete':
+
+    deviceNum = input('Which entry would you like to remove? ')
+    entryNum = int(deviceNum) - 1
+
+    while int(deviceNum) > 4:
+        print('That is not a valid entry number')
+        deviceNum = input('Which entry would you like to update? ')
+
+    else:
+
+        del listofDevices[entryNum]
+        print(listofDevices)
+        writeFileChanges(devices,'devices.txt')
+        
+     
+
+elif askforUpdate.lower() == 'no change':
+    
+    askforMassChange = userInput('Would you like to push the changes to all device configs? [Y or N]: ', ['y','n','Y','N'])
+
+    if askforMassChange.lower() == 'n':
+        print('No changes were made to the above devices')
+
+    elif askforMassChange.lower() == 'y':
+
+        print('null')
 
 
-
-
+        
 
 

@@ -119,7 +119,7 @@ def nexos9000(command, IP):
 def iterateSwitchDict(switchDict):
 
     devDict = {}
-    print(switchDict)
+    
     parsedSwitchDict = switchDict['result']['body']['TABLE_intf']['ROW_intf']
     
     for interface in parsedSwitchDict:
@@ -136,7 +136,7 @@ def getSwitchIPs(IP):
 
     # parces out the response dictionary and creates a dictionary containing the int name as the key and the IP as the value
     Switch = iterateSwitchDict(switchIPDict)
-    print(Switch)
+    
     return Switch
 
 
@@ -528,6 +528,7 @@ def modifyIOSXEOSPF(deviceName):
 
 # main
 
+count = 2
 
 devices = textToJson('devices.txt')
 
@@ -602,9 +603,47 @@ elif askforUpdate.lower() == 'no change':
         print('No changes were made to the above devices')
 
     elif askforMassChange.lower() == 'y':
+        
+        for device in listofDevices:
+            
+            if device['devicetype'].lower() == 'nxos':
 
-        print('null')
+                # lines 611 to 624 are made to add the vlan interface on dist-sw01&2
+                
+                if count < 4:
+                    newVlan = 'vlan-120'
+                    sviName = 'vlan 120'
+                    vlanName = 'TestVlan'
+                    vlanAddress = '172.16.120' + ('.'+str(count))
+                    cookie = getNXCookie(device['mgmtIP'])
+                    enterVLAN = createNXVLAN(device['mgmtIP'], newVlan, vlanName, cookie)
+                    modifiedIP = addIPValue(vlanAddress)
+                    vlanHSRPAddr = hsrpIPValue(modifiedIP)
+                    newAddress = modifiedIP + '/24'
+                    enterSVI = createNXSVI(device['mgmtIP'], sviName, newAddress, cookie)
+                    enterHSRP = changeNXHSRP(device['mgmtIP'], sviName, vlanHSRPAddr, cookie)
+                    enterOSPF = changeNXOSPF(device['mgmtIP'], '1', sviName, cookie)
+                    count +=1
+                
 
+##                interfaceDict = getSwitchIPs(device['mgmtIP'])
+##
+##                print(interfaceDict.values())
+##                    
+##
+##                    if interface.startswith() == 'Vlan':
+##
+##                        cookie = getNXCookie(device['mgmtIP'])
+##                        modifiedIP = addIPValue(device['mgmtIP'])
+##                        HSRPAddr = hsrpIPValue(modifiedIP)
+##                        newAddress = modifiedIP + '/24'
+##                        changeoldVLAN = createNXSVI(device['mgmtIP'], intName, fullAddress, cookie)
+##                       
+##               
+##        #getRouterIPs(IP)
+
+
+            
 
         
 

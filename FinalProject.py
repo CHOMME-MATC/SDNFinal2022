@@ -492,10 +492,10 @@ def modifyIOSXEInt(modifiedIP, userInt): # function responsible for modifying th
     # interfaces besides the first gigabit ethernet interface
 
            
-        xmlBase = xmlBase.replace("%addr%", modifiedIP)
-        xmlBase = xmlBase.replace("%intName%", intName)
-        xmlBase = xmlBase.replace("%intNum%", intNumber)
-        xmlBase = xmlBase.replace("%mask%", '255.255.255.252')
+    xmlBase = xmlBase.replace("%addr%", modifiedIP)
+    xmlBase = xmlBase.replace("%intName%", intName)
+    xmlBase = xmlBase.replace("%intNum%", intNumber)
+    xmlBase = xmlBase.replace("%mask%", '255.255.255.252')
 
     
     return xmlBase # the xml config is returned to main for further use
@@ -519,9 +519,9 @@ def modifyIOSXEOSPF(deviceName):
 
 
     # print statement is used to tell the user to manually change the ospf parameters on the ios xe device 
-    print('Manually change the OSPF statement on '+deviceName +' to match the addressing change from the 172.16 network to the 172.31 Network. You have 120 seconds to do so.')
+    print('Enter the network 172.16.252.0 0.0.3.255 area 0 command on ' +deviceName +' to match the addressing change from the 172.16 network to the 172.31 Network. You have 120 seconds to do so.')
 
-    time.sleep(60) # time is used to delay the main script by 120 seconds in order to allow for manual changes
+    time.sleep(1) # time is used to delay the main script by 120 seconds in order to allow for manual changes
 
     
 
@@ -604,8 +604,23 @@ elif askforUpdate.lower() == 'no change':
     elif askforMassChange.lower() == 'y':
         
         for device in listofDevices:
+            if device['devicetype'].lower() == 'ios-xe':
+
+                
+                    
+                iosxeDict = getRouterIPs(device['mgmtIP'])
+    
+                for interface in iosxeDict:
+                    intNumber = interface[-1:]
+                    
+                    if int(intNumber) > 1:
+                                
+                        modifiedIP = addIPValue(iosxeDict[interface])
+                        xmlConf = modifyIOSXEInt(modifiedIP, interface)
+                        ioscall = netconfCall(xmlConf, device['mgmtIP'])
+                        changeospf = modifyIOSXEOSPF(device['hostname'])
             
-            if device['devicetype'].lower() == 'nxos':
+            elif device['devicetype'].lower() == 'nxos':
 
                 # lines 611 to 624 are made to add the vlan interface on dist-sw01&2
                 
@@ -628,32 +643,38 @@ elif askforUpdate.lower() == 'no change':
                 interfaceDict = getSwitchIPs(device['mgmtIP'])
 
                 for interface in interfaceDict.keys():
-                    if interface.startswith() == 'Vlan':
-                        
+                    if interface.startswith('Vlan'):
+                        print(interfaceDict[interface])
+                        print(interface)
+                        intNumber = interface.lower()[-3:] # intNumber stores the number of the interface
+                        intName = interface.lower()[:-3] # intName stores the name of the interface)
+                        interfacename = intName + ' ' + intNumber
+                        print(interfacename)
                         cookie = getNXCookie(device['mgmtIP'])
-                        modifiedIP = addIPValue(interfaceDict[interface]))
+                        modifiedIP = addIPValue(interfaceDict[interface])
                         HSRPAddr = hsrpIPValue(modifiedIP)
                         fullAddress = modifiedIP + '/24'
-                        changeoldVLAN = createNXSVI(device['mgmtIP'], interface, fullAddress, cookie)
-                        changeHSRP = changeNXHSRP(device['mgmtIP'], interface, vlanHSRPAddr, cookie)
+                        changeoldVLAN = createNXSVI(device['mgmtIP'], interfacename, fullAddress, cookie)
+                        changeHSRP = changeNXHSRP(device['mgmtIP'], interfacename, vlanHSRPAddr, cookie)
                         changeOSPF = changeNXOSPF(device['mgmtIP'], '1', interface, cookie)
 
-                    elif interface.startswith() == 'Eth':
-                        
+                    elif interface.startswith('Eth'):
+                        print(interfaceDict[interface])
+                        print(interface)
                         cookie = getNXCookie(device['mgmtIP'])
-                        modifiedIP = addIPValue(interfaceDict[interface]))
+                        modifiedIP = addIPValue(interfaceDict[interface])
                         HSRPAddr = hsrpIPValue(modifiedIP)
                         fullAddress = modifiedIP + '/30'
                         changeoldInt = createNXSVI(device['mgmtIP'], interface, fullAddress, cookie)
                         changeHSRP = changeNXHSRP(device['mgmtIP'], interface, vlanHSRPAddr, cookie)
                         changeOSPF = changeNXOSPF(device['mgmtIP'], '1', interface, cookie)
 
-              elif device['devicetype'].lower() == 'ios-xe':
 
-              
-                  
-               
-        #getRouterIPs(IP)
+                            
+                            
+                            
+
+                            
 
 
             
